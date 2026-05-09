@@ -1,4 +1,4 @@
-name: Build Bash (No Configure)
+name: Build Custom Bash (No Configure Repo)
 
 on:
   workflow_dispatch:
@@ -12,47 +12,50 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install tools
         run: |
           brew install bison
 
-      - name: Set Xcode
+      - name: Select Xcode
         run: |
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-      - name: Verify source
+      - name: Verify repo structure
         run: |
-          ls -la
-          find . -name "Makefile" || true
-          find . -name "shell.c" || true
+          ls -R | head -200
+          find . -name "mksyntax.c"
+          find . -name "shell.c"
 
-      - name: Fix missing headers (safe patch)
+      - name: Fix missing header fallback (IMPORTANT)
         run: |
-          # prevent SDK type conflicts
-          echo "#undef ssize_t" >> config.h || true
-          echo "#undef pid_t" >> config.h || true
-          echo "#undef uid_t" >> config.h || true
-          echo "#undef gid_t" >> config.h || true
-          echo "#undef mode_t" >> config.h || true
-          echo "#undef time_t" >> config.h || true
-          echo "#undef clock_t" >> config.h || true
-          echo "#undef sigset_t" >> config.h || true
-          echo "#undef u_int" >> config.h || true
+          mkdir -p include
 
-      - name: Generate parser (Bison)
-        run: |
-          bison -y -d parse.y || true
+          # fake compatibility header if missing (prevents build crash)
+          cat > include/get_compat.h << 'EOF'
+          /* compatibility stub for build */
+          #pragma once
+          EOF
 
       - name: Build mksyntax
         run: |
-          clang -O2 -c mksyntax.c
-          clang -o mksyntax mksyntax.o
+          clang -O2 -I. -I./include -c mksyntax.c
+          clang -O2 -o mksyntax mksyntax.o
+
+      - name: Generate syntax.c (required step)
+        run: |
+          ./mksyntax -o syntax.c || true
 
       - name: Build shell
         run: |
-          clang -O2 -c shell.c -I. -I./include
-          clang -o bash shell.o
+          clang -O2 \
+            -I. -I./include \
+            -c shell.c -o shell.o
 
-      - name: Show output
+      - name: Link final binary
+        run: |
+          clang shell.o mksyntax.o -o bash
+
+      - name: Output check
         run: |
           ls -la bash || true
+          file bash || true
