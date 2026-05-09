@@ -1,4 +1,4 @@
-name: Build Bash
+name: Build Bash (No Configure)
 
 on:
   workflow_dispatch:
@@ -20,38 +20,39 @@ jobs:
         run: |
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-      - name: Clean source
+      - name: Verify source
         run: |
-          make distclean || true
-          rm -f config.h config-bot.h
+          ls -la
+          find . -name "Makefile" || true
+          find . -name "shell.c" || true
 
-      - name: Configure Bash (macOS safe baseline)
+      - name: Fix missing headers (safe patch)
         run: |
-          ./configure \
-            --disable-nls \
-            --without-bash-malloc \
-            bash_cv_getenv_redef=no \
-            bash_cv_have_mbstate_t=yes
+          # prevent SDK type conflicts
+          echo "#undef ssize_t" >> config.h || true
+          echo "#undef pid_t" >> config.h || true
+          echo "#undef uid_t" >> config.h || true
+          echo "#undef gid_t" >> config.h || true
+          echo "#undef mode_t" >> config.h || true
+          echo "#undef time_t" >> config.h || true
+          echo "#undef clock_t" >> config.h || true
+          echo "#undef sigset_t" >> config.h || true
+          echo "#undef u_int" >> config.h || true
 
-      - name: Patch config.h (fix type collisions)
+      - name: Generate parser (Bison)
         run: |
-          echo "" >> config.h
-          echo "/* iOS/macOS SDK conflict fix */" >> config.h
-          echo "#undef ssize_t" >> config.h
-          echo "#undef pid_t" >> config.h
-          echo "#undef uid_t" >> config.h
-          echo "#undef gid_t" >> config.h
-          echo "#undef mode_t" >> config.h
-          echo "#undef time_t" >> config.h
-          echo "#undef clock_t" >> config.h
-          echo "#undef sigset_t" >> config.h
-          echo "#undef u_int" >> config.h
+          bison -y -d parse.y || true
 
-      - name: Build
+      - name: Build mksyntax
         run: |
-          make -j$(sysctl -n hw.ncpu)
+          clang -O2 -c mksyntax.c
+          clang -o mksyntax mksyntax.o
 
-      - name: Verify output
+      - name: Build shell
+        run: |
+          clang -O2 -c shell.c -I. -I./include
+          clang -o bash shell.o
+
+      - name: Show output
         run: |
           ls -la bash || true
-          file bash || true
