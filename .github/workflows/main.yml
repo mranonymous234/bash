@@ -1,0 +1,51 @@
+name: Build Bash for iOS
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Apply iOS compatibility patch (getentropy fix)
+        run: |
+          echo "Patching random usage for iOS..."
+
+          # Find and replace getentropy usage
+          grep -R "getentropy" -n bash || true
+
+          # Replace safely if found
+          find bash -type f -name "*.c" -exec sed -i '' \
+            's/getentropy *( *buf *, *len *)/arc4random_buf(buf, len); r = 0;/g' {} +
+
+      - name: Build Bash (arm64 iOS)
+        run: |
+          cd bash
+
+          export SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          export CC="$(xcrun --sdk iphoneos -f clang)"
+
+          export CFLAGS="-arch arm64 -isysroot $SDK -O2 -DSHELL -DMACOSX"
+
+          ./configure \
+            --host=arm-apple-darwin \
+            --disable-nls \
+            --without-bash-malloc \
+            --enable-static-link \
+            --disable-debugger
+
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bash-ios-arm64
+          path: bash/bash
