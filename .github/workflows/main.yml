@@ -15,18 +15,33 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Locate Bash source directory
+      - name: Locate Bash configure script
         run: |
-          echo "Searching for Bash source..."
-          ls -R .
+          echo "Searching for configure script..."
+          find . -name configure -type f
 
-      - name: Configure build
+      - name: Build Bash for iOS (auto-detect source)
         run: |
+          set -e
+
+          CONFIGURE_PATH=$(find . -name configure -type f | head -n 1)
+
+          if [ -z "$CONFIGURE_PATH" ]; then
+            echo "ERROR: configure not found"
+            exit 1
+          fi
+
+          BASH_DIR=$(dirname "$CONFIGURE_PATH")
+
+          echo "Using Bash source directory: $BASH_DIR"
+          cd "$BASH_DIR"
+
           export SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           export CC=$(xcrun --sdk iphoneos -f clang)
 
           export CFLAGS="-arch arm64 -isysroot $SDK -O2 -DSHELL -DMACOSX"
 
+          echo "Running configure..."
           ./configure \
             --host=arm-apple-darwin \
             --disable-nls \
@@ -34,12 +49,13 @@ jobs:
             --enable-static-link \
             --disable-debugger
 
-      - name: Build
-        run: |
+          echo "Building..."
           make -j$(sysctl -n hw.ncpu)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: bash-ios-arm64
-          path: bash
+          path: |
+            **/bash
+            **/bash.exe
