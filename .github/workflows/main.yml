@@ -1,4 +1,4 @@
-name: Build Custom Bash (No Configure Repo)
+name: Build Apple Bash Fork
 
 on:
   workflow_dispatch:
@@ -12,50 +12,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install tools
-        run: |
-          brew install bison
-
       - name: Select Xcode
         run: |
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-      - name: Verify repo structure
+      - name: Verify project
         run: |
-          ls -R | head -200
-          find . -name "mksyntax.c"
-          find . -name "shell.c"
+          ls -la bash.xcodeproj
+          ls -la bash-3.2
 
-      - name: Fix missing header fallback (IMPORTANT)
+      - name: Build Bash (Xcode)
         run: |
-          mkdir -p include
+          xcodebuild \
+            -project bash.xcodeproj \
+            -scheme bash \
+            -configuration Release \
+            -sdk macosx \
+            build
 
-          # fake compatibility header if missing (prevents build crash)
-          cat > include/get_compat.h << 'EOF'
-          /* compatibility stub for build */
-          #pragma once
-          EOF
-
-      - name: Build mksyntax
+      - name: Find output
         run: |
-          clang -O2 -I. -I./include -c mksyntax.c
-          clang -O2 -o mksyntax mksyntax.o
-
-      - name: Generate syntax.c (required step)
-        run: |
-          ./mksyntax -o syntax.c || true
-
-      - name: Build shell
-        run: |
-          clang -O2 \
-            -I. -I./include \
-            -c shell.c -o shell.o
-
-      - name: Link final binary
-        run: |
-          clang shell.o mksyntax.o -o bash
-
-      - name: Output check
-        run: |
-          ls -la bash || true
-          file bash || true
+          find ~/Library/Developer/Xcode/DerivedData -name "bash" || true
