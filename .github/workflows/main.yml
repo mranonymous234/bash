@@ -1,61 +1,57 @@
-name: Build Bash for iOS
+name: Build Bash
 
 on:
-  push:
   workflow_dispatch:
+  push:
 
 jobs:
-  build-ios:
+  build:
     runs-on: macos-14
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
-
-      - name: Locate Bash configure script
+      - name: Install dependencies
         run: |
-          echo "Searching for configure script..."
-          find . -name configure -type f
+          brew install bison
 
-      - name: Build Bash for iOS (auto-detect source)
+      - name: Set Xcode
         run: |
-          set -e
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-          CONFIGURE_PATH=$(find . -name configure -type f | head -n 1)
+      - name: Clean source
+        run: |
+          make distclean || true
+          rm -f config.h config-bot.h
 
-          if [ -z "$CONFIGURE_PATH" ]; then
-            echo "ERROR: configure not found"
-            exit 1
-          fi
-
-          BASH_DIR=$(dirname "$CONFIGURE_PATH")
-
-          echo "Using Bash source directory: $BASH_DIR"
-          cd "$BASH_DIR"
-
-          export SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          export CC=$(xcrun --sdk iphoneos -f clang)
-
-          export CFLAGS="-arch arm64 -isysroot $SDK -O2 -DSHELL -DMACOSX"
-
-          echo "Running configure..."
+      - name: Configure Bash (macOS safe baseline)
+        run: |
           ./configure \
-            --host=arm-apple-darwin \
             --disable-nls \
             --without-bash-malloc \
-            --enable-static-link \
-            --disable-debugger
+            bash_cv_getenv_redef=no \
+            bash_cv_have_mbstate_t=yes
 
-          echo "Building..."
+      - name: Patch config.h (fix type collisions)
+        run: |
+          echo "" >> config.h
+          echo "/* iOS/macOS SDK conflict fix */" >> config.h
+          echo "#undef ssize_t" >> config.h
+          echo "#undef pid_t" >> config.h
+          echo "#undef uid_t" >> config.h
+          echo "#undef gid_t" >> config.h
+          echo "#undef mode_t" >> config.h
+          echo "#undef time_t" >> config.h
+          echo "#undef clock_t" >> config.h
+          echo "#undef sigset_t" >> config.h
+          echo "#undef u_int" >> config.h
+
+      - name: Build
+        run: |
           make -j$(sysctl -n hw.ncpu)
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: bash-ios-arm64
-          path: |
-            **/bash
-            **/bash.exe
+      - name: Verify output
+        run: |
+          ls -la bash || true
+          file bash || true
