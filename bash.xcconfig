@@ -1,3 +1,9 @@
-#include "<DEVELOPER_DIR>/Makefiles/CoreOS/Xcode/BSD.xcconfig"
+SDKROOT = macosx
+MACOSX_DEPLOYMENT_TARGET = 10.15
+
+CLANG_CXX_LIBRARY = libc++
+CLANG_CXX_LANGUAGE_STANDARD = gnu11
+
+ALWAYS_SEARCH_USER_PATHS = NO
 
 SUPPORTED_PLATFORMS = macosx iphoneos iphonesimulator
