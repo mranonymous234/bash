@@ -15,23 +15,15 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Apply iOS compatibility patch (getentropy fix)
+      - name: Locate Bash source directory
         run: |
-          echo "Patching random usage for iOS..."
+          echo "Searching for Bash source..."
+          ls -R .
 
-          # Find and replace getentropy usage
-          grep -R "getentropy" -n bash || true
-
-          # Replace safely if found
-          find bash -type f -name "*.c" -exec sed -i '' \
-            's/getentropy *( *buf *, *len *)/arc4random_buf(buf, len); r = 0;/g' {} +
-
-      - name: Build Bash (arm64 iOS)
+      - name: Configure build
         run: |
-          cd bash
-
           export SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          export CC="$(xcrun --sdk iphoneos -f clang)"
+          export CC=$(xcrun --sdk iphoneos -f clang)
 
           export CFLAGS="-arch arm64 -isysroot $SDK -O2 -DSHELL -DMACOSX"
 
@@ -42,10 +34,12 @@ jobs:
             --enable-static-link \
             --disable-debugger
 
+      - name: Build
+        run: |
           make -j$(sysctl -n hw.ncpu)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: bash-ios-arm64
-          path: bash/bash
+          path: bash
